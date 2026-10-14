@@ -1,0 +1,62 @@
+import cv2
+import easyocr
+import datetime
+
+# Khởi tạo mô hình OCR (hỗ trợ tiếng Việt và tiếng Anh)
+reader = easyocr.Reader(['vi', 'en'])
+
+# Đường dẫn đến video của bạn
+video_path = 'video_input.mp4'
+cap = cv2.VideoCapture(video_path)
+
+fps = cap.get(cv2.CAP_PROP_FPS)
+frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+subtitles = []
+frame_idx = 0
+last_text = ""
+start_frame = 0
+
+# Đọc video từng khung hình (có thể bỏ qua bớt khung hình để chạy nhanh hơn)
+while cap.isOpened():
+    ret, frame = cap.read()
+    if not ret:
+        break
+    
+    # Chỉ quét vùng chứa phụ đề (ví dụ: cắt 25% phía dưới của video để tối ưu tốc độ)
+    height, width, _ = frame.shape
+    crop_frame = frame[int(height * 0.75):height, 0:width]
+    
+    # Nhận diện chữ bằng EasyOCR
+    if frame_idx % int(fps) == 0:  # Quét 1 giây/lần hoặc điều chỉnh tùy ý
+        results = reader.readtext(crop_frame, detail=0)
+        current_text = " ".join(results).strip()
+        
+        if current_text and current_text != last_text:
+            timestamp = frame_idx / fps
+            subtitles.append((timestamp, current_text))
+            last_text = current_text
+
+    frame_idx += 1
+
+cap.release()
+
+# Xuất ra file .srt
+def format_time(seconds):
+    td = datetime.timedelta(seconds=seconds)
+    hours = int(td.seconds // 3600)
+    minutes = int((td.seconds % 3600) // 60)
+    secs = int(td.seconds % 60)
+    milliseconds = int(td.microseconds / 1000)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d},{milliseconds:03d}"
+
+with open("output.srt", "w", encoding="utf-8") as f:
+    for i in range(len(subtitles)):
+        start_time = subtitles[i][0]
+        end_time = subtitles[i+1][0] if i + 1 < len(subtitles) else start_time + 3.0
+        
+        f.write(f"{i + 1}\n")
+        f.write(f"{format_time(start_time)} --> {format_time(end_time)}\n")
+        f.write(f"{subtitles[i][1]}\n\n")
+
+print("Đã xuất file .srt thành công!")
